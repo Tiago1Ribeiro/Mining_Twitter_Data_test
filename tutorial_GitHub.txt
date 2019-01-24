@@ -1,0 +1,12 @@
+Tutorial GitHub
+
+1. criar repository no GitHub
+2. terminal: git init 
+3. terminal: git remote add origin <link do repository> (Clone or download) => Origem do repository
+4. terminal: git config --global user.mail "tiago.r.ribeiro@gmail.com"
+5. terminal: git config --global user.name "Tiago Ribeiro"
+6. terminal: git add . => indexa todos os ficheiros da pasta
+7. terminal: git commit -m "O meur primeiro commit" => 
+8. terminal: git push -u origin master (tive de usar git push --force origin master => https://stackoverflow.com/questions/28429819/rejected-master-master-fetch-first)
+9. terminal: Username for 'https://github.com': <username do GitHub>
+10. Abre janela do OpenSSH a pedir pass do GitHub
