@@ -1,18 +1,42 @@
+#!/usr/bin/env python
+# encoding: utf-8
+
+#--------------
+# Future work #
+#--------------
+# C. 
+# 	Engajamento 
+# 		1) Seguidores (crescimento)
+# 		2) # Respostas
+# 		3) Likes/retweets
+# 	Sentimento
+# 		1) Polaridade das respostas e comentários
+# 			exemplo: conta: @brumelianebrum => Quem matou Marielle? 
+#----------------------
+
 from tweepy import API 
 from tweepy import Cursor
 from tweepy.streaming import StreamListener
 from tweepy import OAuthHandler
 from tweepy import Stream
 
-from textblob import TextBlob
+from textblob import TextBlob                        # to analyse sentiment
+
+from os import path
+from PIL import Image
+from wordcloud import WordCloud, ImageColorGenerator
+from stop_words import get_stop_words
+STOPWORDSpt = get_stop_words('portuguese')
+STOPWORDSen = get_stop_words('english')
  
 import twitter_credentials
 
 import matplotlib.pyplot as plt
+# from IPython import get_ipython
+# get_ipython().run_line_magic('matplotlib', 'inline') 
 import numpy as np
 import pandas as pd
 import re
-
 
 # # # # TWITTER CLIENT # # # #
 class TwitterClient():
@@ -64,7 +88,7 @@ class TwitterStreamer():
         # This handles Twitter authetification and the connection to Twitter Streaming API
         listener = TwitterListener(fetched_tweets_filename)
         auth = self.twitter_autenticator.authenticate_twitter_app() 
-        stream = Stream(auth, listener)
+        stream = Stream(auth, listener, tweet_mode='extended')
 
         # This line filter Twitter Streams to capture data by the keywords: 
         stream.filter(track=hash_tag_list)
@@ -81,7 +105,7 @@ class TwitterListener(StreamListener):
     def on_data(self, data):
         try:
             print(data)
-            with open(self.fetched_tweets_filename, 'a') as tf:
+            with open(self.fetched_tweets_filename, 'a', encoding='utf-8') as tf:
                 tf.write(data)
             return True
         except BaseException as e:
@@ -118,7 +142,6 @@ class TweetAnalyzer():
 		# Estrutura de dados 
         df = pd.DataFrame(data=[tweet.text for tweet in tweets], columns=['tweets'])
         
-		
 		# Adiciona colunas à dataFrame 'df' com id, tamanho, data, etc dos tweets
 		# -----------------------------------------------------------------------
 		# => Objecto tweet
@@ -130,9 +153,58 @@ class TweetAnalyzer():
         df['fonte'] = np.array([tweet.source for tweet in tweets])
         df['likes'] = np.array([tweet.favorite_count for tweet in tweets])
         df['retweets'] = np.array([tweet.retweet_count for tweet in tweets])
-	
 		
         return df
+
+# ------------------		
+# Classes em Python
+# https://www.learnpython.org/en/Classes_and_Objectsd
+# ------------------
+class TweetPlot():
+    
+    # Time Series e brincadeirita com matplotlib
+	# Refs: http://pandas.pydata.org/pandas-docs/version/0.13/visualization.html
+    def subplot(df,twitter_handle):
+        fig1, axes = plt.subplots(nrows=2, ncols=1) 
+        axes[0].set_title('@' + twitter_handle)
+        likes = pd.Series(data=df['likes'].values, index=df['data'])
+        likes.plot(ax=axes[0], marker = ".", alpha = 0.5, label='likes') 
+        
+        retweets = pd.Series(data=df['retweets'].values, index=df['data'])
+        retweets.plot(ax=axes[0], marker = ".", alpha = 0.5, label = 'retweets')
+        axes[0].legend()
+	
+        sentiment = pd.Series(data=df['sentimento'].values, index=df['data'])
+        sentiment.plot(ax=axes[1], linestyle='None', marker=".")
+        plt.title('sentimento')
+        fig1.tight_layout()
+        plt.show()
+    
+    # Apply word cloud 
+	# https://www.datacamp.com/community/tutorials/wordcloud-python
+    def wordcloud(df):
+        # Start with one review:
+        text = ' '.join(df['tweets']) # concatena texto
+    
+        # Set the stopwords list (portuguese)
+        stopwords = set(STOPWORDSpt + STOPWORDSen)
+        stopwords.update(['https','RT','co','aqui', 'of', 'and', 'têm', 'sido', 'with', 'queremo', 'sobre']) # adiciona elementos a um 'set'
+
+        # Create and generate a word cloud image:
+        wordcloud = WordCloud().generate(text)
+
+        # Display the generated image:
+        wordcloud = WordCloud(
+        max_font_size=50, 
+        max_words=100, 
+        stopwords = stopwords, 
+        background_color="black"
+        ).generate(text)
+	
+        plt.figure()
+        plt.imshow(wordcloud, interpolation="bilinear")
+        plt.axis("off")
+        plt.show()
 
  
 if __name__ == '__main__':
@@ -140,116 +212,23 @@ if __name__ == '__main__':
     twitter_client = TwitterClient()
     tweet_analyzer = TweetAnalyzer()
     api = twitter_client.get_twitter_client_api()
-
-    tweets_esq = api.user_timeline(screen_name="EsquerdaNet", count=300)
-    tweets_livr = api.user_timeline(screen_name="LIVREpt",    count=300)
-    tweets_lib = api.user_timeline(screen_name="LiberalPT",   count=300)
     
-	
-
-    df_esq = tweet_analyzer.tweets_to_data_frame(tweets_esq)
-   
-    df_livr = tweet_analyzer.tweets_to_data_frame(tweets_livr)
-    df_lib = tweet_analyzer.tweets_to_data_frame(tweets_lib)
-    print(df_lib.size)
-    df_esq['sentimento'] = np.array([tweet_analyzer.analyze_sentiment(tweet) for tweet in df_esq['tweets']])   # extrai o texto dos tweets
-    df_livr['sentimento'] = np.array([tweet_analyzer.analyze_sentiment(tweet) for tweet in df_livr['tweets']]) # extrai o texto dos tweets
-    df_lib['sentimento'] = np.array([tweet_analyzer.analyze_sentiment(tweet) for tweet in df_lib['tweets']])   # extrai o texto dos tweets
-
-    # print(df_esq.head(10))
-	
-	# Time Series e brincadeirita com matplotlib
-	# Refs: http://pandas.pydata.org/pandas-docs/version/0.13/visualization.html
-	
-    # time_sentyment = pd.Series(data=df_esq['sentimento'].values, index=df_esq['data'])
-    # time_sentyment.plot(figsize=(10, 4), marker='o', color='r')
-    # plt.title('sentimento')
-    # plt.show()
+    twitter_handle = input("Twitter handle (ignore the @): ")
+    tweets = api.user_timeline(screen_name = twitter_handle, count=3000)
     
-    # time_favs = pd.Series(data=df['likes'].values, index=df['data'])
-    # time_favs.plot(figsize=(10, 4), color='b')
-    # plt.title('likes')
-    # plt.show()
+    df = tweet_analyzer.tweets_to_data_frame(tweets)
 
-    # time_retweets = pd.Series(data=df['retweets'].values, index=df['data'])
-    # time_retweets.plot(figsize=(10, 4), color='y')
-    # plt.title('retweets')
-    # plt.show()
+    df['sentimento'] = np.array([tweet_analyzer.analyze_sentiment(tweet) for tweet in df['tweets']])  # acrescenta coluna de sentimento 
+    
+    # Plots wordcloud and likes/retweets and sentiment charts
+    TweetPlot.wordcloud(df)
+    TweetPlot.subplot(df, twitter_handle)
+	
 
-    # Layered Time Series:
 	
-    # time_likes = pd.Series(data=df_esq['likes'].values, index=df_esq['data'])
-    # time_likes.plot(figsize=(10, 4), label="likes", legend=True)
-	
-    # time_retweets = pd.Series(data=df_esq['retweets'].values, index=df_esq['data'])
-    # time_retweets.plot(figsize=(10, 4), label="retweets", legend=True)
-    # plt.title('Layered Time Series')
-	
-    # plt.show()
-	
-	# Subplots
-	# --------
-	
-    fig1, axes = plt.subplots(nrows=2, ncols=1) 
-	
-    axes[0].set_title('@EsquerdaNET')
-    likes_esq = pd.Series(data=df_esq['likes'].values, index=df_esq['data'])
-    likes_esq.plot(ax=axes[0]) 
-    axes[0].plot(label="likes", legend=True)
-	
-    retweets_esq = pd.Series(data=df_esq['retweets'].values, index=df_esq['data'])
-    retweets_esq.plot(ax=axes[0])
-    axes[0].plot(label="retweets", legend=True)
-	
-    sentym_esq = pd.Series(data=df_esq['sentimento'].values, index=df_esq['data'])
-    sentym_esq.plot(ax=axes[1])
-    plt.title('sentimento')
-    fig1.tight_layout()
-    plt.show()
-	
-    fig2, axes = plt.subplots(nrows=2, ncols=1) 
-	
-    axes[0].set_title('@LIVREpt')
-    likes_livr = pd.Series(data=df_livr['likes'].values, index=df_livr['data'])
-    likes_livr.plot(ax=axes[0]) 
-    axes[0].plot(label="likes", legend=True)
-	
-    retweets_livr = pd.Series(data=df_livr['retweets'].values, index=df_livr['data'])
-    retweets_livr.plot(ax=axes[0])
-    axes[0].plot(label="retweets", legend=True)
-	
-    sentym_livr = pd.Series(data=df_livr['sentimento'].values, index=df_livr['data'])
-    sentym_livr.plot(ax=axes[1])
-    plt.title('sentimento')
-    fig2.tight_layout()
-    plt.show()
-	
-    fig3, axes = plt.subplots(nrows=2, ncols=1) 
-	
-    axes[0].set_title('@LiberalPT')
-    likes_lib = pd.Series(data=df_lib['likes'].values, index=df_lib['data'])
-    likes_lib.plot(ax=axes[0]) 
-    axes[0].plot(label="likes", legend=True)
-	
-    retweets_lib = pd.Series(data=df_lib['retweets'].values, index=df_lib['data'])
-    retweets_lib.plot(ax=axes[0])
-    axes[0].plot(label="retweets", legend=True)
-	
-    sentym_lib = pd.Series(data=df_lib['sentimento'].values, index=df_lib['data'])
-    sentym_lib.plot(ax=axes[1])
-    plt.title('sentimento')
-    fig3.tight_layout()
-    plt.show()
-	
-	
-	# Apply word cloud 
-	# https://www.datacamp.com/community/tutorials/wordcloud-python
 
-	# Engajamento 
-	# 1) Seguidores (crescimento)
-	# 2) # Respostas
-	# 3) Likes/retweets
-	# Sentimento
-	# 1) Polaridade das respostas e comentários
 	
-	# conta: @brumelianebrum => Quem matou Marielle? 
+	
+
+	
+
